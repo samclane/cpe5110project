@@ -1,0 +1,21 @@
+9 --9 lines of code
+
+FPSUB  R0,R0,R0
+
+FPADD  R0,R0,#1.0
+
+FPSUB  R1,R1,R1
+
+FPADD  R1,R1,#17.0
+
+FPDIV  R3,R1,R2
+
+FPMULT R4,R3,R1
+
+FPADD  R5,R0,R1
+
+FPSUB  R6,R0,R1
+
+HALT
+
+0

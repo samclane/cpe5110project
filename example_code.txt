@@ -1,0 +1,11 @@
+--This line is a comment
+6       --6 lines of code
+FPMULT R0, R0, #0
+FPADD RO, R0,#3.75
+FPMULT R1, R1,#0
+-- Another random comment
+FPADD R1,R1,#26.7
+FPMULT R3,R0,R1
+HALT
+0       --no memory accesses
+

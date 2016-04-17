@@ -1,0 +1,30 @@
+
+13 -- 13 lines of code
+
+FPMULT R0,R0,#0
+
+FPADD  R0,R0,#3.75
+
+STR    R0,#100
+
+FPMULT R1,R1,#0
+
+FPADD  R1,R1,#26.7
+
+STR    R1,#101
+
+SUB    R0,R0,R0
+
+ADD    R0,R0,#100
+
+LOAD   R4,R0
+
+ADD    R0,R0,#1
+
+LOAD   R5,R0
+
+FPMULT R3,R4,R5
+
+HALT
+
+0
