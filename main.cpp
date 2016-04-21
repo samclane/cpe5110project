@@ -6,14 +6,12 @@
 #include <fstream>
 #include <vector>
 using namespace std;
-const int INPUT_BUFFER_SIZE = 10000;
 
 
 int main (int argc, char** argv)
 {
-	string inputBuffer[INPUT_BUFFER_SIZE];
 	string temp_line;
-	int instrCount, memoryCount;
+	int instrCount = -1, memoryCount = -1;
 	int index;
 	ifstream in_stream;
 	if (argc != 2)
@@ -35,27 +33,34 @@ int main (int argc, char** argv)
 		getline(in_stream,temp_line); //gets next line from file
 		if (48 <= ((temp_line[0]-'0') + 48) && ((temp_line[0]-'0') + 48) <= 57)
 		{
-			//first value is a number
-			int index2 = 0;
+			//if first value is a number
+			int line_index = 0;
 			string tempNum = "";
-			while(temp_line[index2] != ' ')
+			while(temp_line[line_index] != ' ')
 			{
-				tempNum += temp_line[index2];
-				index2++;
+				tempNum += temp_line[line_index];
+				line_index++;
 			}
-			instrCount = atoi(tempNum.c_str());
-			cout << "found int: " << ((temp_line[0]-'0') + 48) << endl;
+			if (instrCount == -1)
+			{
+				instrCount = atoi(tempNum.c_str());
+			}
+			else if (memoryCount == -1)
+			{
+				memoryCount = atoi(tempNum.c_str());
+			}
+			else
+			{
+				cerr << "Found a third number in file. Something is wrong." << endl;
+				in_stream.close();
+				return 0;
+			}
 		} 
 		index++;
 	}
 	in_stream.close();
-
-
-
-	for (int i = 0; i < 0; i++)
-	{
-		cout << inputBuffer[i] << endl;
-	}
+	cout << "instrCount: " << instrCount << endl;
+	cout << "memoryCount: " << memoryCount << endl;
 }
 
 
