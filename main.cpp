@@ -31,23 +31,30 @@ int main (int argc, char** argv)
 	while(!in_stream.eof())
 	{
 		getline(in_stream,temp_line); //gets next line from file
-		if (48 <= ((temp_line[0]-'0') + 48) && ((temp_line[0]-'0') + 48) <= 57)
+		//cout << temp_line[0] << endl;
+		//cout << temp_line[0] - '0' << endl;
+		if (0 <= (temp_line[0]-'0') && (temp_line[0]-'0') <= 9)
 		{
 			//if first value is a number
 			int line_index = 0;
-			string tempNum = "";
+			string temp_num = "";
 			while(temp_line[line_index] != ' ')
 			{
-				tempNum += temp_line[line_index];
+				if(temp_line[line_index] == '-' && temp_line[line_index+1] == '-')
+				{
+					//found an inline comment
+					break;
+				}
+				temp_num += temp_line[line_index];
 				line_index++;
 			}
 			if (instrCount == -1)
 			{
-				instrCount = atoi(tempNum.c_str());
+				instrCount = atoi(temp_num.c_str());
 			}
 			else if (memoryCount == -1)
 			{
-				memoryCount = atoi(tempNum.c_str());
+				memoryCount = atoi(temp_num.c_str());
 			}
 			else
 			{
@@ -55,6 +62,23 @@ int main (int argc, char** argv)
 				in_stream.close();
 				return 0;
 			}
+		}
+		if ('A' <= (temp_line[0] - '0' + 48) && (temp_line[0] - '0' + 48) <= 'Z')
+		{
+			//if first value is a character
+			int line_index = 0;
+			string temp_instruction = "";
+			while(temp_line[line_index] != '\r')
+			{
+				if(temp_line[line_index] == '-' && temp_line[line_index+1] == '-')
+				{
+					//found an inline comment
+					break;
+				}
+				temp_instruction += temp_line[line_index];
+				line_index++;
+			}
+			cout << temp_instruction << endl;
 		} 
 		index++;
 	}
