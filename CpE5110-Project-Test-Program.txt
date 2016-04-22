@@ -1,0 +1,25 @@
+------------------------------------------------------
+-- This file solves the series expansion for ln(1+x)
+-- ln(1+x) = x - x^2/2 + x^3/3 - ...
+-- R0 holds x
+-- R1 holds x^(k+1), initially at 1
+-- R2 holds (k+1), initially at 0 (i.e. k = -1)
+-- R3 holds the result, initially at 0
+-- R4 holds (-1)^k, initially at -1
+-- R5 is a temporary register
+-- Assume x can take on floating point values ...
+ -- R6 holds the accuracy of the computation
+------------------------------------------------------
+10
+LOAD R6, 50
+FPMULT R1, R1, R0
+FPADD R2, R2, #1.0
+FPMULT R4, R4, #-1.0
+FPDIV R5, R4, R2
+FPMULT R5, R5, R1
+FPADD R3, R3, R5
+FPSUB R6, R6, #1
+BNEZ R6, #-8 -- "8" here means 8 instructions from the next PC (from HALT)
+HALT
+1
+<50><20>

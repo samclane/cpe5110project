@@ -10,6 +10,10 @@ using namespace std;
 
 int main (int argc, char** argv)
 {
+	/* DEBUG SECTION */
+	int myCount = 0;
+	/* END DEBUG     */
+
 	string temp_line;
 	int instrCount = -1, memoryCount = -1;
 	int index;
@@ -38,12 +42,17 @@ int main (int argc, char** argv)
 			//if first value is a number
 			int line_index = 0;
 			string temp_num = "";
-			while(temp_line[line_index] != ' ')
+			while(temp_line[line_index] != '\n')
 			{
-				if(temp_line[line_index] == '-' && temp_line[line_index+1] == '-')
+				if(temp_line[line_index] == '-')
 				{
-					//found an inline comment
-					break;
+					cout << "found a - while getting number" << endl;
+					if(temp_line[line_index+1] == '-')
+					{
+						//found an inline comment
+						cout << "found a whole comment while getting number\n";
+						break;
+					}
 				}
 				temp_num += temp_line[line_index];
 				line_index++;
@@ -68,12 +77,18 @@ int main (int argc, char** argv)
 			//if first value is a character
 			int line_index = 0;
 			string temp_instruction = "";
-			while(temp_line[line_index] != '\r')
+			while(temp_line[line_index] != '\n')
 			{
-				if(temp_line[line_index] == '-' && temp_line[line_index+1] == '-')
+
+				if(temp_line[line_index] == '-')
 				{
-					//found an inline comment
-					break;
+					cout << "found a - while getting instruction\n";
+					if(temp_line[line_index+1] == '-')
+					{
+						//found an inline comment
+						cout << "found a whole coment while getting instruction\n";
+						break;
+					}
 				}
 				temp_instruction += temp_line[line_index];
 				line_index++;
