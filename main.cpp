@@ -11,12 +11,10 @@ using namespace std;
 int main (int argc, char** argv)
 {
 	/* DEBUG SECTION */
-	int myCount = 0;
 	/* END DEBUG     */
 
 	string temp_line;
 	int instrCount = -1, memoryCount = -1;
-	int index;
 	ifstream in_stream;
 	if (argc != 2)
 	{
@@ -35,23 +33,20 @@ int main (int argc, char** argv)
 	while(!in_stream.eof())
 	{
 		getline(in_stream,temp_line); //gets next line from file
-		//cout << temp_line[0] << endl;
-		//cout << temp_line[0] - '0' << endl;
 		if (0 <= (temp_line[0]-'0') && (temp_line[0]-'0') <= 9)
 		{
 			//if first value is a number
 			int line_index = 0;
 			string temp_num = "";
-			while(temp_line[line_index] != '\n')
+			bool commentfound = false;
+			while(temp_line[line_index] != '\n' && commentfound == false)
 			{
 				if(temp_line[line_index] == '-')
 				{
-					cout << "found a - while getting number" << endl;
 					if(temp_line[line_index+1] == '-')
 					{
 						//found an inline comment
-						cout << "found a whole comment while getting number\n";
-						break;
+						commentfound = true;
 					}
 				}
 				temp_num += temp_line[line_index];
@@ -77,25 +72,26 @@ int main (int argc, char** argv)
 			//if first value is a character
 			int line_index = 0;
 			string temp_instruction = "";
-			while(temp_line[line_index] != '\n')
+			bool commentfound = false;
+			while(temp_line[line_index] != '\n' && commentfound == false)
 			{
-
 				if(temp_line[line_index] == '-')
 				{
-					cout << "found a - while getting instruction\n";
 					if(temp_line[line_index+1] == '-')
 					{
 						//found an inline comment
-						cout << "found a whole coment while getting instruction\n";
-						break;
+						commentfound = true;
 					}
 				}
-				temp_instruction += temp_line[line_index];
+				if (commentfound == false)
+				{
+					temp_instruction += temp_line[line_index];		
+				}
 				line_index++;
 			}
 			cout << temp_instruction << endl;
-		} 
-		index++;
+			temp_line = "";
+		}
 	}
 	in_stream.close();
 	cout << "instrCount: " << instrCount << endl;
