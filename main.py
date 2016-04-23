@@ -37,7 +37,8 @@ def main(argv):
 	mem_count = -1
 	instr_list = []
 	mem_dict = {}
-	mem_finder = re.compile(ur'<(\d*)> ?<(\d*).?\d*>')
+	#regular expression describing memory format
+	mem_finder = re.compile(ur'<(\d*)> ?<(\d*).?\d*>') 
 	print "Welcome to the program"
 	if len(argv) != 1: #highly robust input sanitization
 		print "Wrong number of files!"
@@ -60,7 +61,7 @@ def main(argv):
 				instr_list.append(instr)
 			elif line[0] is '<': #must be a memory thing
 				address, value = re.findall(mem_finder, line)[0]
-				mem_dict[address.strip('><')] = value.strip('><')
+				mem_dict[address] = value
 			
 
 	print "instr_count: " + instr_count
@@ -70,7 +71,7 @@ def main(argv):
 		print "Type: " + instruction.get_type()
 		for idx, operand in enumerate(instruction.get_operands()):
 			print "Operand " + str(idx) + ": " + operand
-	for address, value in mem_dict:
+	for address, value in mem_dict.items():
 		print "<"+address+">"+"<"+value+">"
 
 if __name__ == "__main__":
