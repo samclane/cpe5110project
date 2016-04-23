@@ -28,6 +28,9 @@ class Instruction():
 	def get_type(self):
 		return self.type
 
+	def __str__(self):
+		return self.opcode + " " + ' '.join(self.operands)
+
 
 
 
@@ -67,10 +70,7 @@ def main(argv):
 	print "instr_count: " + instr_count
 	print "mem_count: " + mem_count
 	for instruction in instr_list:
-		print "Opcode: " + instruction.get_opcode()
-		print "Type: " + instruction.get_type()
-		for idx, operand in enumerate(instruction.get_operands()):
-			print "Operand " + str(idx) + ": " + operand
+		print str(instruction)
 	for address, value in mem_dict.items():
 		print "<"+address+">"+"<"+value+">"
 
