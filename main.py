@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys, getopt
+import sys, re
 
 #sys.argv is command line args
 
@@ -37,6 +37,7 @@ def main(argv):
 	mem_count = -1
 	instr_list = []
 	mem_dict = {}
+	mem_finder = re.compile(ur'<(\d*)> ?<(\d*).?\d*>')
 	print "Welcome to the program"
 	if len(argv) != 1: #highly robust input sanitization
 		print "Wrong number of files!"
@@ -58,7 +59,7 @@ def main(argv):
 				instr = Instruction(opcode,operands)
 				instr_list.append(instr)
 			elif line[0] is '<': #must be a memory thing
-				address, value = line.split('><')
+				address, value = re.findall(mem_finder, line)[0]
 				mem_dict[address.strip('><')] = value.strip('><')
 			
 
