@@ -6,7 +6,6 @@ import sys, getopt
 
 
 
-
 class Instruction():
 	def __init__(self, opcode, argv):
 		self.operands = []
@@ -30,13 +29,16 @@ class Instruction():
 		return self.type
 
 
+
+
+
 def main(argv):
 	instr_count = -1
 	mem_count = -1
 	instr_list = []
-	mem_list = []
+	mem_dict = {}
 	print "Welcome to the program"
-	if len(argv) != 1:
+	if len(argv) != 1: #highly robust input sanitization
 		print "Wrong number of files!"
 		return
 	with open(argv[0]) as codefile:
@@ -55,17 +57,20 @@ def main(argv):
 				operands = line.split()[1:]
 				instr = Instruction(opcode,operands)
 				instr_list.append(instr)
-			else: #must be a memory thing
-				mem_list.append(line)
+			elif line[0] is '<': #must be a memory thing
+				address, value = line.split('><')
+				mem_dict[address.strip('><')] = value.strip('><')
+			
+
 	print "instr_count: " + instr_count
 	print "mem_count: " + mem_count
-	print instr_list
-	print mem_list
 	for instruction in instr_list:
 		print "Opcode: " + instruction.get_opcode()
 		print "Type: " + instruction.get_type()
 		for idx, operand in enumerate(instruction.get_operands()):
 			print "Operand " + str(idx) + ": " + operand
+	for address, value in mem_dict:
+		print "<"+address+">"+"<"+value+">"
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
