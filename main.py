@@ -4,6 +4,23 @@ import sys, getopt
 
 #sys.argv is command line args
 
+
+
+
+class Instruction():
+	def __init__(self, opcode, argv):
+		self.operands = []
+		self.opcode = opcode
+		for operand in argv:
+			self.operands.append(operand.strip(','))
+
+	def get_opcode(self):
+		return self.opcode
+
+	def get_operands(self):
+		return self.operands
+
+
 def main(argv):
 	instr_count = -1
 	mem_count = -1
@@ -25,13 +42,20 @@ def main(argv):
 				elif mem_count == -1:
 					mem_count = line
 			elif line[0].isalpha(): #must be an instruction
-				instr_list.append(line)
+				opcode = line.split()[0]
+				operands = line.split()[1:]
+				instr = Instruction(opcode,operands)
+				instr_list.append(instr)
 			else: #must be a memory thing
 				mem_list.append(line)
 	print "instr_count: " + instr_count
 	print "mem_count: " + mem_count
 	print instr_list
 	print mem_list
+	for instruction in instr_list:
+		print "Opcode: " + instruction.get_opcode()
+		for idx, operand in enumerate(instruction.get_operands()):
+			print "Operand " + str(idx) + ": " + operand
 
 if __name__ == "__main__":
 	main(sys.argv[1:])
