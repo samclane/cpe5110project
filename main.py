@@ -1,17 +1,17 @@
 #!/usr/bin/python
 
-import sys, re
+import re
+import sys
 
 
 # sys.argv is command line args
-
 
 class Instruction():
     def __init__(self, opcode, argv):
         self.operands = []
         self.opcode = opcode
         for operand in argv:
-            self.operands.append(operand.strip(',#'))
+            self.operands.append(operand.strip(','))
         if self.opcode[0] == 'B':
             self.type = "BRANCH"
         elif self.opcode == "FPMULT" or self.opcode == "FPDIV":
@@ -22,15 +22,6 @@ class Instruction():
             self.type = "MEMORY_ACCESS"
         else:
             self.type = "INT"
-
-    def get_opcode(self):
-        return self.opcode
-
-    def get_operands(self):
-        return self.operands
-
-    def get_type(self):
-        return self.type
 
     def __str__(self):
         # defines the print() function for Instruction
@@ -59,39 +50,95 @@ class RegisterFile(dict):
         return (self[key] for key in self)
 
 
+class ReservationEntry():
+    def __init__(self, busy=False, op1="", op1valid=False, op2="", op2valid=False, ready=False, rob_index=-1):
+        self.busy = busy
+        self.op1 = op1
+        self.op1valid = op1valid
+        self.op2 = op2
+        self.op2valid = op2valid
+        self.ready = ready
+        self.rob_index = rob_index
+
+    def __str__(self):
+        return "Busy: %s Operand1: %s Valid: %s Operand2: %s Valid: %s Ready: %s" % (
+            self.busy, self.op1, self.op1valid, self.op2, self.op2valid, self.ready)
+
+
 class ReservationStation():
     def __init__(self, size, op_type):
         self.size = size
         self.op_type = op_type
         self.entry_list = []
         for x in xrange(self.size):
-            self.entry_list.append((False, '', False, '', False, False))
+            self.entry_list.append(ReservationEntry(False, '', False, '', False, False))
 
-    def load_instruction(self, instruction):
+    def load_instruction(self, instruction, rob_index):
         for idx, entry in enumerate(self.entry_list):
-            if entry[0] is False:
-                self.entry_list[idx] = (
-                True, instruction.get_operands()[0], False, instruction.get_operands()[1], False, False)
+            if entry.busy is False:
+                if instruction.type == "BRANCH":
+                    self.entry_list[idx] = ReservationEntry(True, instruction.operands[0], False,
+                                                            instruction.operands[1], False, False, rob_index)
+
+                else:
+                    self.entry_list[idx] = ReservationEntry(
+                        True, instruction.operands[1], False, instruction.operands[2], False, False, rob_index)
                 return True
         return False
 
     def __str__(self):
-        return str(self.entry_list)
+        returnlist = ""
+        for entry in self.entry_list:
+            returnlist = returnlist + str(entry)
+        return returnlist
 
 
-def issue(instruction):
-    global rs_int, rs_fp_add, rs_fp_mult, PC
-    succeeds = False
-    if instruction.get_type() == "BRANCH" or instruction.get_type() == "INT":
-        succeeds = rs_int.load_instruction(instruction)
-    elif instruction.get_type() == "FPADD":
-        succeeds = rs_fp_add.load_instruction(instruction)
-    elif instruction.get_type() == "FPMULT":
-        succeeds = rs_fp_mult.load_instruction(instruction)
-    if succeeds == True:
-        PC = PC + 1
+class LoadBufferEntry():
+    def __init__(self, busy=False, destination="", source="", rob_index=-1):
+        self.busy = busy
+        self.destination = destination
+        self.source = source
+        self.rob_index = rob_index
 
 
+class LoadBuffer():
+    def __init__(self):
+        self.entry_list = []
+
+    def add_entry(self, instruction, rob_index):
+        self.entry_list.append(LoadBufferEntry(True, instruction.operands[0], instruction.operands[1], rob_index))
+
+    def get_entry(self, index):
+        return self.entry_list[index]
+
+    def __str__(self):
+        returnlist = ""
+        for entry in self.entry_list:
+            returnlist = returnlist + str(entry)
+        return returnlist
+
+
+class ReorderBufferEntry():
+    def __init__(self, opcode="", dest="", exe_cycles=1, result="", ready=False, speculative=False):
+        self.opcode = opcode
+        self.dest = dest
+        self.exe_cycles = exe_cycles
+        self.result = result
+        self.ready = ready
+        self.speculative = speculative
+
+
+class ReorderBuffer():
+    def __init__(self):
+        self.entry_list = []
+
+    def add_entry(self, instruction):
+        self.entry_list.append(
+            ReorderBufferEntry(instruction.opcode, instruction.operands[0], cycle_dict[instruction.opcode]))
+        return len(self.entry_list) - 1  # index of value added
+
+
+# Glboal values
 ZERO, NEGATIVE, OVERFLOW = (False, False, False)
 OUT_OF_ORDER = False
 instr_count = -1
@@ -102,9 +149,27 @@ R = RegisterFile()
 rs_fp_add = ReservationStation(3, 'FPADD')
 rs_fp_mult = ReservationStation(2, 'FPMULT')
 rs_int = ReservationStation(2, 'INT')
-load_buffer = {}
-rob = {}
-PC = 0
+load_buffer = LoadBuffer()
+reorder_buffer = ReorderBuffer()
+program_counter = 0
+cycle_dict = {
+    "FPADD": 3,
+    "FPSUB": 3,
+    "FPMULT": 5,
+    "FPDIV": 8,
+    "ADD": 1,
+    "SUB": 1,
+    "LOAD": 1,
+    "MOV": 1,
+    "STR": 3,
+    "BR": 1,
+    "BGT": 1,
+    "BLT": 1,
+    "BGE": 1,
+    "BLE": 1,
+    "BZ": 1,
+    "BNEZ": 1
+}
 
 
 def main(argv):
@@ -112,7 +177,7 @@ def main(argv):
     global instr_count, mem_count, instr_queue, mem_dict
     # regular expression describing memory format
     # https://regex101.com/r/zY4hB0/3
-    mem_finder = re.compile(ur'<(\d+)> ?<([-+]?\d*\.?\d*)>')
+    mem_finder = re.compile(ur"<(\d+)> ?<([-+]?\d*\.?\d*)>")
     print "Welcome to the program"
     if len(argv) != 1:  # highly robust input sanitization
         print "Wrong number of files!"
@@ -128,8 +193,6 @@ def main(argv):
                 elif mem_count == -1:
                     mem_count = line
             elif line[0].isalpha():  # must be an instruction
-                if line[0] == 'H':
-                    continue
                 opcode = line.split()[0]
                 operands = line.split()[1:]
                 instr = Instruction(opcode, operands)
@@ -138,21 +201,36 @@ def main(argv):
                 address, value = re.findall(mem_finder, line)[0]
                 mem_dict[address] = value
 
-    for instruction in instr_queue:
-        print "issuing " + str(instruction)
-        issue(instruction)
-        print rs_int
-        print rs_fp_add
-        print rs_fp_mult
-        print "\n"
+
+
+    while(instr_queue[program_counter].opcode != "HALT"):
+        issue(instr_queue[program_counter])
+
 
     print "instr_count: " + instr_count
     print "mem_count: " + mem_count
     for instruction in instr_queue:
         print str(instruction)
-        print " " + instruction.get_type();
+        print " " + instruction.type
     for address, value in mem_dict.items():
         print "<" + address + ">" + "<" + value + ">"
+
+
+def issue(instruction):
+    global rs_int, rs_fp_add, rs_fp_mult, program_counter
+    succeeds = False
+    rob_index = reorder_buffer.add_entry(instruction)
+    if instruction.type == "BRANCH" or instruction.type == "INT":
+        succeeds = rs_int.load_instruction(instruction, rob_index)
+    elif instruction.type == "FPADD":
+        succeeds = rs_fp_add.load_instruction(instruction, rob_index)
+    elif instruction.type == "FPMULT":
+        succeeds = rs_fp_mult.load_instruction(instruction, rob_index)
+    elif instruction.type == "MEMORY_ACCESS":
+        succeeds = True
+        load_buffer.add_entry(instruction, rob_index)
+    if succeeds == True or succeeds == False:
+        program_counter = program_counter + 1
 
 
 # magic code than runs main
