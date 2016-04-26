@@ -178,6 +178,7 @@ def main(argv):
     # regular expression describing memory format
     # https://regex101.com/r/zY4hB0/3
     mem_finder = re.compile(ur"<(\d+)> ?<([-+]?\d*\.?\d*)>")
+    instr_finder = re.compile(ur"([A-Z]+)\s*(R?#?\d+)?,?\s*(R?#?\d+)?,?\s*(R?#?\d+)?")
     print "Welcome to the program"
     if len(argv) != 1:  # highly robust input sanitization
         print "Wrong number of files!"
@@ -187,16 +188,18 @@ def main(argv):
             line = line.partition('--')[0]
             if len(line) == 0:  # if trimmed line is empty, go to next iteration
                 continue
-            if line[0].isdigit():  # must be a count
+            elif line[0].isdigit():  # must be a count
                 if instr_count == -1:
                     instr_count = line
                 elif mem_count == -1:
                     mem_count = line
             elif line[0].isalpha():  # must be an instruction
-                opcode = line.split()[0]
-                operands = line.split()[1:]
-                instr = Instruction(opcode, operands)
-                instr_queue.append(instr)
+                if line == "HALT\n":
+                    instr_queue.append(Instruction("HALT", ["", "", ""]))
+                    continue
+                opcode = re.findall(instr_finder, line)[0][0]
+                operands =  re.findall(instr_finder, line)[0][1:]
+                instr_queue.append(Instruction(opcode, operands))
             elif line[0] is '<':  # must be a memory thing
                 address, value = re.findall(mem_finder, line)[0]
                 mem_dict[address] = value
@@ -235,4 +238,10 @@ def issue(instruction):
 
 # magic code than runs main
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    for file in sys.argv[1:]:
+        main([file])
+        print "\n\n\n"
+
+
+
+#([A-Z]+)\s*(R?#?\d+)?,?\s*(R?#?\d+)?,?\s*(R?#?\d+)?
