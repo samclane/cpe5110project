@@ -25,6 +25,9 @@ LOAD   R5,R0
 
 FPMULT R3,R4,R5
 
+--BR     #-4
+--BZ     R0, #-12
+
 HALT
 
 0

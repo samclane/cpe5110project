@@ -24,6 +24,10 @@ class Instruction():
             self.destination = None
             self.source1 = None
             self.source2 = operands[0]
+        elif opcode == 'BZ':
+            self.destination = None
+            self.source1 = operands[0]
+            self.source2 = operands[1]
         elif opcode == 'STR' or opcode[0] == 'B':
             self.destination = None
             self.source1 = operands[0]
@@ -128,7 +132,7 @@ class ReorderBuffer():
     def check_source(self, value):
         index = -1
         for idx, entry in enumerate(self.entry_list):
-            if entry.destination is not None:
+            if entry.destination is not None and entry.write_back_success is False:
                 if entry.destination == value:
                     index = idx
         return index
@@ -147,6 +151,7 @@ mem_dict = {}
 R = RegisterFile()
 reorder_buffer = ReorderBuffer()
 program_counter = 0
+speculating = False
 cycle_dict = {
     "FPADD": 3,
     "FPSUB": 3,
@@ -181,12 +186,13 @@ def main(argv):
     # https://regex101.com/r/zY4hB0/3
     mem_finder = re.compile(ur"<(\d+)> ?<([-+]?\d*\.?\d*)>")
     # regular expression describing instruction format
-    instr_finder = re.compile(ur"([A-Z]+)\s*(R?#?\d+)?,?\s*(R?#?[+-]?\d+)?,?\s*(R?#?[+-]?\d+.?\d*)?")
+    instr_finder = re.compile(ur"([A-Z]+)\s*(R?#?[+-]?\d+)?,?\s*(R?#?[+-]?\d+)?,?\s*(R?#?[+-]?\d+.?\d*)?")
     print "Welcome to the program"
     if len(argv) != 1:  # highly robust input sanitation
         print "Wrong number of files!"
         return
     with open(argv[0]) as codefile:
+        print "Running " + str(codefile)
         for line in codefile:
             line = line.partition('--')[0]
             if len(line) == 0:  # if trimmed line is empty, go to next iteration
@@ -221,11 +227,22 @@ def main(argv):
 
 
 def issue(instruction):
-    global rs_int, rs_fp_add, rs_fp_mult, program_counter
+    global rs_int, rs_fp_add, rs_fp_mult, program_counter, speculating
     succeeds = False
     rs_index = 0
     rs_type = None
-    if instruction.opcode[0] is 'B' or instruction.opcode in ["ADD" , "SUB"]:
+    if instruction.opcode[0] is 'B':
+        for idx, station in enumerate(rs_int):
+            if station is False:
+                rs_int[idx] = True
+                succeeds = True
+                rs_index = idx
+                rs_type = "INT"
+            if succeeds:
+                if speculating is False:
+                    speculating = True
+                break
+    if instruction.opcode in ["ADD" , "SUB"]:
         for idx, station in enumerate(rs_int):
             if station is False:
                 rs_int[idx] = True
@@ -265,6 +282,8 @@ def issue(instruction):
         if instruction.opcode != '*':
             program_counter += 1
         rob_entry = reorder_buffer.add_entry(instruction, clock_cycle, rs_index, rs_type)
+        if speculating is True:
+            reorder_buffer.entry_list[rob_entry].speculative = True
         if src1 is not -1:
             reorder_buffer.entry_list[rob_entry].source1_ROB = src1
             reorder_buffer.entry_list[rob_entry].source1_valid = False
@@ -286,26 +305,37 @@ def execute():
                             entry.remaining_cycles = 1
                         elif pwr_of_two(op1) or pwr_of_two(op2):
                             entry.remaining_cycles = 2
+                elif entry.source2_valid is True and entry.speculative is True:
+                    if entry.operand[0] == 'B':
+                        branch_predict_at(entry)
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
         if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.ready is False:
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
                 entry.result = operand1 + operand2
+                entry.ready = True
             elif entry.opcode == 'FPSUB' or entry.opcode == 'SUB':
                 entry.result = operand1 - operand2
+                entry.ready = True
             elif entry.opcode == 'FPMULT':
                 entry.result = operand1 * operand2
+                entry.ready = True
             elif entry.opcode == 'FPDIV':
                 entry.result = operand1 / operand2
+                entry.ready = True
             elif entry.opcode == 'LOAD':
                 entry.result = operand2
+                entry.ready = True
             elif entry.opcode == 'MOV':
                 entry.result = operand2
+                entry.ready = True
             elif entry.opcode == 'STR':
                 entry.result = operand1
+                entry.ready = True
             elif entry.opcode[0] == 'B':
                 branch(entry)
+                entry.ready = True
             elif entry.opcode == 'HALT':
                 done = True
                 for entry_other in reorder_buffer.entry_list:
@@ -315,7 +345,7 @@ def execute():
                 if done:
                     EXECUTION_FINISHED = True
 
-            entry.ready = True
+
 
 
 def write_result():
@@ -342,8 +372,6 @@ def write_result():
                     continue
                 else:
                     R[int(entry.destination[1:])] = entry.result
-
-
                 if entry.rs_type == 'INT':
                     rs_int[entry.rs_index] = False
                 elif entry.rs_type == 'FPADD':
@@ -365,8 +393,39 @@ def pwr_of_two(num):
     return num != 0 and ((num & (num - 1)) == 0)
 
 def branch(entry):
+    # Non speculatively execute the branch
+    global program_counter, speculating
+    branch = False
+
+
+
+
+    if entry.opcode == 'BR':
+        program_counter += int(entry.source2[1:])
+    elif entry.opcode == 'BZ':
+        op1, op2 = entry.get_values()
+        if op1 == 0:
+            program_counter += int(op2)
+
+
+
     print "Branch"
 
+def branch_predict_at(entry):
+    global program_counter
+    op1, op2 = entry.get_values()
+    entry.result = True
+    program_counter += int(op2)
+
+def check_done():
+    global EXECUTION_FINISHED
+    done = True
+    for entry_other in reorder_buffer.entry_list:
+        if entry_other.write_back_success is False and entry_other.opcode != 'HALT':
+            done = False
+            break
+    if done:
+        EXECUTION_FINISHED = True
 
 
 # magic code than runs main
