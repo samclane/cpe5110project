@@ -6,12 +6,16 @@ import sys
 
 # sys.argv is command line args
 
+
+# data structure to represent an instruction. Holds the opcode and the operands as properties, as well as
+# cycles needed to finsh running
 class Instruction():
     def __init__(self, opcode, argv):
         operands = []
         self.opcode = opcode
         for operand in argv:
             operands.append(operand.strip(','))
+        # Sort operands based on opcode
         if opcode in ["FPADD", "FPSUB", "FPMULT", "FPDIV", "ADD", "SUB"]:
             self.destination = operands[0]
             self.source1 = operands[1]
@@ -37,9 +41,10 @@ class Instruction():
             self.source1 = None
             self.source2 = None
 
+        # sets total cycles to completion (based on global dictionary of cycle counts)
         self.total_cycles = cycle_dict[self.opcode]
 
-
+# data structure to represent register bank. extends dictionary allowing [] operator access
 class RegisterFile(dict):
     def __init__(self, *args, **kwargs):
         super(RegisterFile, self).__init__(*args, **kwargs)
@@ -66,32 +71,35 @@ class RegisterFile(dict):
 
 
 
-
+# Wraps instructions once they get into reorder buffer, keeping orignal instruction from being changed. Holds a ton
+# of properties about the instruction's execution status.
 class ReorderBufferEntry():
     def __init__(self, instruction, clock_cycle, rs_index, rs_type):
         self.opcode = instruction.opcode
         self.destination = instruction.destination
         self.source1 = instruction.source1
-        self.source1_ROB = None
-        self.source1_valid = True
+        self.source1_ROB = None # holds the reorder buffer index of the dependant instruction
+        self.source1_valid = True # is the source1 valid to read from?
         self.source2 = instruction.source2
         self.source2_ROB = None
         self.source2_valid = True
         self.total_cycles = instruction.total_cycles
         self.result = None
-        self.speculative = False
+        self.speculative = False # is the instruction issued speculatively by a branch?
         self.remaining_cycles = self.total_cycles
         self.executing = False
-        self.ready = False
+        self.ready = False # instruction has executed and is ready to write back
         self.cycle_issued = clock_cycle
-        self.rs_index = rs_index
-        self.rs_type = rs_type
-        self.write_back_success = False
+        self.rs_index = rs_index # index in the reservation station instruction holds
+        self.rs_type = rs_type # which RS the instruction goes into
+        self.write_back_success = False # has the result been written back to memeory?
         if self.opcode[0]  == 'B':
-            self.branch_success = False
+            self.branch_success = False # was the last branch prediction correct?
             self.last_prediction = 0 # 0 is not taken, 1 is taken
 
     def get_values(self):
+        # returns the values at the memory locations specified by the operands. Return results should all be floating
+        # point numbers
         value1, value2 = (None, None)
         if self.source1 is not None:
             if self.source1[0] is 'R':
@@ -115,7 +123,8 @@ class ReorderBufferEntry():
         return (value1, value2)
 
 
-
+# data structure to hold all the ReorderBufferEntries. Probably could have just been a list, but class allows for
+# additional functionality
 class ReorderBuffer():
     def __init__(self):
         self.entry_list = []
@@ -133,12 +142,13 @@ class ReorderBuffer():
         return index
 
     def check_source(self, value):
+        # check data dependencies for the given value
         index = -1
         for idx, entry in enumerate(self.entry_list):
             if entry.destination is not None and entry.write_back_success is False:
                 if entry.destination == value:
                     index = idx
-        return index
+        return index #returns ROB index of dependency, or -1 if no dependency
 
 
 
@@ -176,6 +186,7 @@ cycle_dict = {
     '*':-1
 }
 clock_cycle = 1
+# reservation stations
 rs_int = [False, False, False, False]
 rs_fp_mult = [False, False, False, False]
 rs_fp_add = [False, False, False, False]
@@ -234,6 +245,7 @@ def issue(instruction):
     succeeds = False
     rs_index = 0
     rs_type = None
+    # sort the instruction into the correct, open reservation station slot
     if instruction.opcode[0] is 'B':
         for idx, station in enumerate(rs_int):
             if station is False:
@@ -275,7 +287,7 @@ def issue(instruction):
     elif instruction.opcode in ["LOAD", "MOV", "STR", "HALT"]:
         succeeds = True
 
-
+    # check for data dependencies
     dest = reorder_buffer.check_destinations(instruction.destination)
     src1 = reorder_buffer.check_source(instruction.source1)
     src2 = reorder_buffer.check_source(instruction.source2)
@@ -287,6 +299,7 @@ def issue(instruction):
         rob_entry = reorder_buffer.add_entry(instruction, clock_cycle, rs_index, rs_type)
         if speculating is True:
             reorder_buffer.entry_list[rob_entry].speculative = True
+        # if there's a data dependency, set it up in the ROB entry
         if src1 is not -1:
             reorder_buffer.entry_list[rob_entry].source1_ROB = src1
             reorder_buffer.entry_list[rob_entry].source1_valid = False
@@ -314,6 +327,7 @@ def execute():
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
         if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.ready is False:
+            # Actually run the code
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
                 entry.result = operand1 + operand2
@@ -487,7 +501,7 @@ def check_done():
         EXECUTION_FINISHED = True
 
 
-# magic code than runs main
+# magic code that runs main
 if __name__ == "__main__":
     for file in sys.argv[1:]:
         main([file])
