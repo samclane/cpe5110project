@@ -181,7 +181,7 @@ def main(argv):
     # https://regex101.com/r/zY4hB0/3
     mem_finder = re.compile(ur"<(\d+)> ?<([-+]?\d*\.?\d*)>")
     # regular expression describing instruction format
-    instr_finder = re.compile(ur"([A-Z]+)\s*(R?#?\d+)?,?\s*(R?#?\d+)?,?\s*(R?#?\d+.?\d*)?")
+    instr_finder = re.compile(ur"([A-Z]+)\s*(R?#?\d+)?,?\s*(R?#?[+-]?\d+)?,?\s*(R?#?[+-]?\d+.?\d*)?")
     print "Welcome to the program"
     if len(argv) != 1:  # highly robust input sanitation
         print "Wrong number of files!"
@@ -279,15 +279,16 @@ def execute():
             if entry.executing is False:
                 if entry.source1_valid is True and entry.source2_valid is True:
                     entry.executing = True
-                    if entry.opcode is "FPMULT":
+                    if entry.opcode == 'FPMULT':
                         # change clock cycles for special cases
-                        if entry.source1 in [-1, 1, 0] or entry.source2 in [-1,1,0]:
+                        op1, op2 = entry.get_values()
+                        if op1 in [-1, 1, 0] or op2 in [-1,1,0]:
                             entry.remaining_cycles = 1
-                        elif pwr_of_two(entry.source1) or pwr_of_two(entry.source2):
+                        elif pwr_of_two(op1) or pwr_of_two(op2):
                             entry.remaining_cycles = 2
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
-        if entry.remaining_cycles <= 0 and entry.write_back_success is False:
+        if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.ready is False:
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
                 entry.result = operand1 + operand2
@@ -336,7 +337,7 @@ def write_result():
                 elif entry.opcode[0] == 'B':
                     branch(entry)
                 elif entry.opcode == 'LOAD':
-                    R[int(entry.destination[1:])] = mem_dict[int(entry.result)]
+                    R[int(entry.destination[1:])] = entry.result
                 elif entry.opcode == 'HALT':
                     continue
                 else:
@@ -358,6 +359,9 @@ def write_result():
                 continue
 
 def pwr_of_two(num):
+    if num % 1 != 0.0:
+        return False
+    num = int(num)
     return num != 0 and ((num & (num - 1)) == 0)
 
 def branch(entry):

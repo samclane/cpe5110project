@@ -19,7 +19,6 @@ ADD    R0,R0,#100
 
 LOAD   R4,R0
 
-
 ADD    R0,R0,#1
 
 LOAD   R5,R0
