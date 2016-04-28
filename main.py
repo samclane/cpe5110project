@@ -74,7 +74,7 @@ class ReorderBufferEntry():
         self.source2_ROB = None
         self.source2_valid = True
         self.total_cycles = instruction.total_cycles
-        self.result = ""
+        self.result = None
         self.speculative = False
         self.remaining_cycles = self.total_cycles
         self.executing = False
@@ -125,22 +125,14 @@ class ReorderBuffer():
                     index = idx
         return index
 
-    def check_source1(self, value):
+    def check_source(self, value):
         index = -1
         for idx, entry in enumerate(self.entry_list):
-            if entry.source1 is not None:
-                if entry.source1 == value and entry.source1[0] != '#':
+            if entry.destination is not None:
+                if entry.destination == value:
                     index = idx
         return index
 
-
-    def check_source2(self, value):
-        index = -1
-        for idx, entry in enumerate(self.entry_list):
-            if entry.source2 is not None:
-                if entry.source2 == value and entry.source2[0] != '#':
-                    index = idx
-        return index
 
 
 
@@ -225,9 +217,7 @@ def main(argv):
 
         clock_cycle += 1
 
-
-
-    print "Finished with " + clock_cycle + " clock cycles."
+    print "Finished with " + str(clock_cycle) + " clock cycles."
 
 
 def issue(instruction):
@@ -266,10 +256,9 @@ def issue(instruction):
         succeeds = True
 
 
-
     dest = reorder_buffer.check_destinations(instruction.destination)
-    src1 = reorder_buffer.check_source1(instruction.source1)
-    src2 = reorder_buffer.check_source2(instruction.source2)
+    src1 = reorder_buffer.check_source(instruction.source1)
+    src2 = reorder_buffer.check_source(instruction.source2)
 
 
     if succeeds == True:
@@ -318,8 +307,8 @@ def execute():
                 branch(entry)
             elif entry.opcode == 'HALT':
                 done = True
-                for entry in reorder_buffer.entry_list:
-                    if entry.write_back_success is False and entry.opcode != 'HALT':
+                for entry_other in reorder_buffer.entry_list:
+                    if entry_other.write_back_success is False and entry_other.opcode != 'HALT':
                         done = False
                         break
                 if done:
@@ -341,12 +330,19 @@ def write_result():
             for other_entry in reorder_buffer.entry_list[:idx]:
                 if other_entry.destination == entry.destination and other_entry.write_back_success is False:
                     WAW_FLAG = True
-            if not WAW_FLAG and not entry.speculative:
+            if not WAW_FLAG and not entry.speculative and not entry.write_back_success:
                 if entry.opcode == 'STR':
                     mem_dict[op2] = entry.result
-                # branch prediction logic
+                elif entry.opcode[0] == 'B':
+                    branch(entry)
+                elif entry.opcode == 'LOAD':
+                    R[int(entry.destination[1:])] = mem_dict[int(entry.result)]
+                elif entry.opcode == 'HALT':
+                    continue
                 else:
                     R[int(entry.destination[1:])] = entry.result
+
+
                 if entry.rs_type == 'INT':
                     rs_int[entry.rs_index] = False
                 elif entry.rs_type == 'FPADD':
@@ -359,19 +355,7 @@ def write_result():
                         other_entry.source1_valid = True
                     if other_entry.source2_ROB == idx:
                         other_entry.source2_valid = True
-
                 continue
-
-
-
-
-
-
-
-
-
-
-
 
 def pwr_of_two(num):
     return num != 0 and ((num & (num - 1)) == 0)
