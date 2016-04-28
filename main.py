@@ -87,6 +87,9 @@ class ReorderBufferEntry():
         self.rs_index = rs_index
         self.rs_type = rs_type
         self.write_back_success = False
+        if self.opcode[0]  == 'B':
+            self.branch_success = False
+            self.last_prediction = 0 # 0 is not taken, 1 is taken
 
     def get_values(self):
         value1, value2 = (None, None)
@@ -411,11 +414,67 @@ def branch(entry):
 
     print "Branch"
 
+
+# These algorithms don't work, but they're implemented because we're not quitters
+
+# Branch predict: Always Taken
 def branch_predict_at(entry):
+    # predicts always taken
     global program_counter
     op1, op2 = entry.get_values()
     entry.result = True
     program_counter += int(op2)
+
+
+# Branch Predict: One bit branch predictor
+state_1b = 0 # not taken
+def branch_predict_1b(entry):
+    # 0 - Not Taken
+    # 1 - Taken
+    global program_counter, state_1b
+    if entry.branch_success == False:
+        # if branch was incorrect, change prediction
+        state_1b = not state_1b
+    if state_1b:
+        # Predict taken
+        entry.result = True
+        entry.last_prediction = 1
+        op1, op2 = entry.get_values()
+        program_counter += int(op2)
+    else:
+        entry.result = False
+        entry.last_prediction = 0
+
+# Branch Predict: Two bit branch predictor
+state_2b = 0 #strongly not taken
+def branch_predict_2b(entry):
+    # 0 - strongly not taken
+    # 1 - weakly not taken
+    # 2 - weakly taken
+    # 3 - strongly taken
+    global program_counter, state_2b
+    if entry.branch_success == False:
+        if entry.last_prediction == 1:
+        # if predicted  taken
+            if state_2b != 0:
+                state_2b -= 1
+        else:
+            # if predicted not taken
+            if state_2b != 3:
+                state_2b += 1
+    if state_2b in [0, 1]:
+        # if in not taken
+        entry.result = False
+        entry.last_prediction = 0
+        # change result to not taken, don't change PC
+    elif state_2b in [2, 3]:
+        # change result to taken, change pc accordingly
+        entry.result = True
+        entry.last_prediction = 1
+        op1, op2 = entry.get_values()
+        program_counter += int(op2)
+
+
 
 def check_done():
     global EXECUTION_FINISHED
