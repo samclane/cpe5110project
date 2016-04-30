@@ -2,6 +2,7 @@
 
 import re
 import sys
+from pprint import pprint
 
 
 # sys.argv is command line args
@@ -79,7 +80,7 @@ class RegisterFile(dict):
 
 
 
-# Wraps instructions once they get into reorder buffer, keeping orignal instruction from being changed. Holds a ton
+# Wraps instructions once they get into reorder buffer, keeping original  instruction from being changed. Holds a ton
 # of properties about the instruction's execution status.
 class ReorderBufferEntry():
     def __init__(self, instruction, clock_cycle, rs_index, rs_type):
@@ -132,8 +133,7 @@ class ReorderBufferEntry():
         return (value1, value2)
 
     def __str__(self):
-        attrs = vars(self)
-        return ', '.join("%s: (%s)" % item for item in attrs.items())
+        pprint(vars(self))
 
 
 # data structure to hold all the ReorderBufferEntries. Probably could have just been a list, but class allows for
@@ -243,12 +243,14 @@ def main(argv):
                 mem_dict[address] = value
 
     while(not EXECUTION_FINISHED):
+        print "Clock cycle: " + str(clock_cycle)
+        print "-----------"
         issue()
         execute()
         write_result()
 
         for entry in reorder_buffer.entry_list:
-            print entry
+            pprint(vars(entry))
 
         print '\n'
 
