@@ -252,8 +252,7 @@ def issue():
     rs_index = 0
     rs_type = None
     instruction = instr_queue[program_counter]
-    # sort the instruction into the correct, open reservation station slot
-    if instruction.opcode[0] is 'B':
+    if instruction.opcode[0] is 'B' and speculating is False:
         for idx, station in enumerate(rs_int):
             if station is False:
                 rs_int[idx] = True
@@ -261,8 +260,7 @@ def issue():
                 rs_index = idx
                 rs_type = "INT"
             if succeeds:
-                if speculating is False:
-                    speculating = True
+                speculating = True
                 break
     if instruction.opcode in ["ADD" , "SUB"]:
         for idx, station in enumerate(rs_int):
@@ -315,7 +313,7 @@ def issue():
             reorder_buffer.entry_list[rob_entry].source2_valid = False
 
 def execute():
-    global EXECUTION_FINISHED
+    global EXECUTION_FINISHED, ZERO, NEGATIVE, OVERFLOW
     for entry in reorder_buffer.entry_list:
         if entry.ready is False and entry.cycle_issued != clock_cycle:
             if entry.executing is False:
@@ -338,12 +336,18 @@ def execute():
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
                 entry.result = operand1 + operand2
+                if entry.result > 2 ** 32:
+                    OVERFLOW = True
+                    entry.result = (entry.result) % (2 ** 32)
                 entry.ready = True
             elif entry.opcode == 'FPSUB' or entry.opcode == 'SUB':
                 entry.result = operand1 - operand2
                 entry.ready = True
             elif entry.opcode == 'FPMULT':
                 entry.result = operand1 * operand2
+                if entry.result > 2 ** 32:
+                    OVERFLOW = True
+                    entry.result = (entry.result) % (2 ** 32)
                 entry.ready = True
             elif entry.opcode == 'FPDIV':
                 entry.result = operand1 / operand2
@@ -368,6 +372,11 @@ def execute():
                         break
                 if done:
                     EXECUTION_FINISHED = True
+
+            if entry.result == 0:
+                ZERO = True;
+            if entry.result < 0:
+                NEGATIVE = True
 
 
 
@@ -419,24 +428,40 @@ def pwr_of_two(num):
 def branch(entry):
     # Non speculatively execute the branch
     global program_counter, speculating
-    branch = False
-
-
-
-
+    branch_yn = False
+    op1, op2 = entry.get_values()
     if entry.opcode == 'BR':
-        program_counter += int(entry.source2[1:])
+        branch_yn = True
     elif entry.opcode == 'BZ':
-        op1, op2 = entry.get_values()
         if op1 == 0:
-            program_counter += int(op2)
+            branch_yn = True
+    elif entry.opcode == 'BGT':
+        if op1 > 0:
+            branch_yn = True
+    elif entry.opcode == 'BLT':
+        if op1 < 0:
+            branch_yn = True
+    elif entry.opcode == 'BGE':
+        if op1 >= 0:
+            branch_yn = True
+    elif entry.opcode == 'BLE':
+        if op1 <= 0:
+            branch_yn = True
+    elif entry.opcode == 'BNEZ':
+        if op1 != 0:
+            branch_yn = True
 
-
-
+    if branch_yn:
+        for other_entry in reorder_buffer.entry_list:
+            if other_entry.speculative is True:
+                other_entry.speculative = False
+    else:
+        for other_entry in reorder_buffer.entry_list:
+            if other_entry.speculative is True:
+                other_entry.write_back_success = True
     print "Branch"
 
 
-# These algorithms don't work, but they're implemented because we're not quitters
 
 # Branch predict: Always Taken
 def branch_predict_at(entry):
