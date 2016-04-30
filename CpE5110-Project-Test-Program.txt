@@ -19,7 +19,7 @@ FPDIV R5, R4, R2
 FPMULT R5, R5, R1
 FPADD R3, R3, R5
 FPSUB R6, R6, #1
-BNEZ R6, #-8 -- "8" here means 8 instructions from the next PC (from HALT)
+--BNEZ R6, #-8 -- "8" here means 8 instructions from the next PC (from HALT)
 HALT
 1
 <50><20>
