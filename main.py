@@ -98,8 +98,8 @@ class ReorderBufferEntry():
         self.rs_type = rs_type # which RS the instruction goes into
         self.write_back_success = False # has the result been written back to memeory?
         if self.opcode[0]  == 'B':
-            self.branch_success = False # was the last branch prediction correct?
-            self.last_prediction = 0 # 0 is not taken, 1 is taken
+            self.branch_prediction = None # was the last branch prediction correct?
+            self.PC_before_predict = 0
 
     def get_values(self):
         # returns the values at the memory locations specified by the operands. Return results should all be floating
@@ -240,6 +240,10 @@ def main(argv):
         execute()
         write_result()
 
+        for entry in reorder_buffer.entry_list:
+            print entry
+
+        print '\n'
 
         clock_cycle += 1
 
@@ -252,7 +256,7 @@ def issue():
     rs_index = 0
     rs_type = None
     instruction = instr_queue[program_counter]
-    if instruction.opcode[0] is 'B' and speculating is False:
+    if instruction.opcode[0] == 'B' and speculating is False:
         for idx, station in enumerate(rs_int):
             if station is False:
                 rs_int[idx] = True
@@ -289,8 +293,13 @@ def issue():
                 rs_type = "FPMULT"
             if succeeds:
                 break
-    elif instruction.opcode in ["LOAD", "MOV", "STR", "HALT"]:
+    elif instruction.opcode in ["LOAD", "MOV", "STR"]:
         succeeds = True
+    elif instruction.opcode == 'HALT':
+        succeeds = True
+        for other_entry in reorder_buffer.entry_list:
+            if other_entry.opcode == 'HALT':
+                succeeds = False
 
     # check for data dependencies
     dest = reorder_buffer.check_destinations(instruction.destination)
@@ -430,6 +439,7 @@ def branch(entry):
     global program_counter, speculating
     branch_yn = False
     op1, op2 = entry.get_values()
+
     if entry.opcode == 'BR':
         branch_yn = True
     elif entry.opcode == 'BZ':
@@ -452,14 +462,16 @@ def branch(entry):
             branch_yn = True
 
     if branch_yn:
-        for other_entry in reorder_buffer.entry_list:
-            if other_entry.speculative is True:
-                other_entry.speculative = False
+
+            for other_entry in reorder_buffer.entry_list:
+                if other_entry.speculative is True:
+                    other_entry.speculative = False
     else:
         for other_entry in reorder_buffer.entry_list:
             if other_entry.speculative is True:
                 other_entry.write_back_success = True
-    print "Branch"
+
+    speculating = False
 
 
 
