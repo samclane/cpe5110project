@@ -44,6 +44,10 @@ class Instruction():
         # sets total cycles to completion (based on global dictionary of cycle counts)
         self.total_cycles = cycle_dict[self.opcode]
 
+    def __str__(self):
+        attrs = vars(self)
+        return ', '.join("%s: (%s)" % item for item in attrs.items())
+
 # data structure to represent register bank. extends dictionary allowing [] operator access
 class RegisterFile(dict):
     def __init__(self, *args, **kwargs):
@@ -121,6 +125,10 @@ class ReorderBufferEntry():
 
 
         return (value1, value2)
+
+    def __str__(self):
+        attrs = vars(self)
+        return ', '.join("%s: (%s)" % item for item in attrs.items())
 
 
 # data structure to hold all the ReorderBufferEntries. Probably could have just been a list, but class allows for
@@ -226,11 +234,9 @@ def main(argv):
             elif line[0] is '<':  # must be a memory thing
                 address, value = re.findall(mem_finder, line)[0]
                 mem_dict[address] = value
-    instr_queue.append(Instruction('*', "")) #append dummy instruction that signifies the end
 
     while(not EXECUTION_FINISHED):
-        if instr_queue[program_counter].opcode !='*':
-            issue(instr_queue[program_counter])
+        issue()
         execute()
         write_result()
 
@@ -240,11 +246,12 @@ def main(argv):
     print "Finished with " + str(clock_cycle) + " clock cycles."
 
 
-def issue(instruction):
+def issue():
     global rs_int, rs_fp_add, rs_fp_mult, program_counter, speculating
     succeeds = False
     rs_index = 0
     rs_type = None
+    instruction = instr_queue[program_counter]
     # sort the instruction into the correct, open reservation station slot
     if instruction.opcode[0] is 'B':
         for idx, station in enumerate(rs_int):
@@ -294,7 +301,7 @@ def issue(instruction):
 
 
     if succeeds == True:
-        if instruction.opcode != '*':
+        if instruction.opcode != 'HALT':
             program_counter += 1
         rob_entry = reorder_buffer.add_entry(instruction, clock_cycle, rs_index, rs_type)
         if speculating is True:
