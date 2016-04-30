@@ -335,9 +335,9 @@ def execute():
                             entry.remaining_cycles = 1
                         elif pwr_of_two(op1) or pwr_of_two(op2):
                             entry.remaining_cycles = 2
-                elif entry.source2_valid is True and entry.speculative is True:
-                    if entry.operand[0] == 'B':
-                        branch_predict_at(entry)
+                #elif entry.source2_valid is True and entry.speculative is True:
+                    #if entry.operand[0] == 'B':
+                        #branch_predict_at(entry)
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
         if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.ready is False:
@@ -398,7 +398,7 @@ def write_result():
         if entry.ready is True and entry.executing is True:
             # write back next clock cycle
             entry.executing = False
-        elif entry.ready is True and entry.executing is False:
+        elif entry.ready is True and entry.executing is False and entry.speculative is False:
             # time to write back!
             for other_entry in reorder_buffer.entry_list[:idx]:
                 if other_entry.destination == entry.destination and other_entry.write_back_success is False:
@@ -462,14 +462,31 @@ def branch(entry):
             branch_yn = True
 
     if branch_yn:
-
+        if entry.branch_prediction is True:
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     other_entry.speculative = False
+        elif entry.branch_prediction is False:
+            for other_entry in reorder_buffer.entry_list:
+                if other_entry.speculative is True:
+                    other_entry.speculative = False
+                    if other_entry is not entry:
+                        other_entry.write_back_success = True
+            program_counter = entry.PC_before_predict + int(op2)
+        elif entry.branch_prediction is None:
+            program_counter += int(op2)
     else:
-        for other_entry in reorder_buffer.entry_list:
-            if other_entry.speculative is True:
-                other_entry.write_back_success = True
+        if entry.branch_prediction is True:
+            for other_entry in reorder_buffer.entry_list:
+                if other_entry.speculative is True:
+                    other_entry.speculative = False
+                    if other_entry is not entry:
+                        other_entry.write_back_success = True
+            program_counter = entry.PC_before_predict + int(op2)
+        elif entry.branch_prediction is False:
+            for other_entry in reorder_buffer.entry_list:
+                if other_entry.speculative is True:
+                    other_entry.speculative = False
 
     speculating = False
 
