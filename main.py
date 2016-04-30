@@ -55,6 +55,10 @@ class RegisterFile(dict):
         self.itemlist = super(RegisterFile, self).keys()
         for x in xrange(16):
             self[x] = 0
+        self[0] = 2
+        self[1] = 1
+        self[4] = -1
+
 
     def __setitem__(self, key, value):
         self.itemlist.append(key)
@@ -97,6 +101,7 @@ class ReorderBufferEntry():
         self.rs_index = rs_index # index in the reservation station instruction holds
         self.rs_type = rs_type # which RS the instruction goes into
         self.write_back_success = False # has the result been written back to memeory?
+        self.flushed = False # removed from ROB due to incorrect branch prediction
         if self.opcode[0]  == 'B':
             self.branch_prediction = None # was the last branch prediction correct?
             self.PC_before_predict = 0
@@ -153,7 +158,7 @@ class ReorderBuffer():
         # check data dependencies for the given value
         index = -1
         for idx, entry in enumerate(self.entry_list):
-            if entry.destination is not None and entry.write_back_success is False:
+            if entry.destination is not None and entry.write_back_success is False and entry.flushed is False:
                 if entry.destination == value:
                     index = idx
         return index #returns ROB index of dependency, or -1 if no dependency
@@ -173,6 +178,8 @@ R = RegisterFile()
 reorder_buffer = ReorderBuffer()
 program_counter = 0
 speculating = False
+branch_stall = False
+branches_taken = 0
 cycle_dict = {
     "FPADD": 3,
     "FPSUB": 3,
@@ -247,62 +254,65 @@ def main(argv):
 
         clock_cycle += 1
 
+    print branches_taken
+    print R[3]
     print "Finished with " + str(clock_cycle) + " clock cycles."
 
 
 def issue():
-    global rs_int, rs_fp_add, rs_fp_mult, program_counter, speculating
+    global rs_int, rs_fp_add, rs_fp_mult, program_counter, speculating, branch_stall
     succeeds = False
     rs_index = 0
     rs_type = None
     instruction = instr_queue[program_counter]
-    if instruction.opcode[0] == 'B' and speculating is False:
-        for idx, station in enumerate(rs_int):
-            if station is False:
-                rs_int[idx] = True
-                succeeds = True
-                rs_index = idx
-                rs_type = "INT"
-            if succeeds:
-                speculating = True
-                break
-    if instruction.opcode in ["ADD" , "SUB"]:
-        for idx, station in enumerate(rs_int):
-            if station is False:
-                rs_int[idx] = True
-                succeeds = True
-                rs_index = idx
-                rs_type = "INT"
-            if succeeds:
-                break
-    elif instruction.opcode in ["FPADD", "FPSUB"]:
-        for idx, station in enumerate(rs_fp_add):
-            if station is False:
-                rs_fp_add[idx] = True
-                succeeds = True
-                rs_index = idx
-                rs_type = "FPADD"
-            if succeeds:
-                break
-    elif instruction.opcode in  ["FPMULT", "FPDIV"]:
-        for idx, station in enumerate(rs_fp_mult):
-            if station is False:
-                rs_fp_mult[idx] = True
-                succeeds = True
-                rs_index = idx
-                rs_type = "FPMULT"
-            if succeeds:
-                break
-    elif instruction.opcode in ["LOAD", "MOV", "STR"]:
-        succeeds = True
-    elif instruction.opcode == 'HALT':
-        succeeds = True
-        for other_entry in reorder_buffer.entry_list:
-            if other_entry.opcode == 'HALT':
-                succeeds = False
+    if branch_stall is False:
+        if instruction.opcode[0] == 'B' and speculating is False:
+            for idx, station in enumerate(rs_int):
+                if station is False:
+                    rs_int[idx] = True
+                    succeeds = True
+                    rs_index = idx
+                    rs_type = "INT"
+                if succeeds:
+                    branch_stall = True
+                    break
+        if instruction.opcode in ["ADD" , "SUB"]:
+            for idx, station in enumerate(rs_int):
+                if station is False:
+                    rs_int[idx] = True
+                    succeeds = True
+                    rs_index = idx
+                    rs_type = "INT"
+                if succeeds:
+                    break
+        elif instruction.opcode in ["FPADD", "FPSUB"]:
+            for idx, station in enumerate(rs_fp_add):
+                if station is False:
+                    rs_fp_add[idx] = True
+                    succeeds = True
+                    rs_index = idx
+                    rs_type = "FPADD"
+                if succeeds:
+                    break
+        elif instruction.opcode in  ["FPMULT", "FPDIV"]:
+            for idx, station in enumerate(rs_fp_mult):
+                if station is False:
+                    rs_fp_mult[idx] = True
+                    succeeds = True
+                    rs_index = idx
+                    rs_type = "FPMULT"
+                if succeeds:
+                    break
+        elif instruction.opcode in ["LOAD", "MOV", "STR"]:
+            succeeds = True
+        elif instruction.opcode == 'HALT':
+            succeeds = True
+            for other_entry in reorder_buffer.entry_list:
+                if other_entry.opcode == 'HALT':
+                    succeeds = False
 
     # check for data dependencies
-    dest = reorder_buffer.check_destinations(instruction.destination)
+    #dest = reorder_buffer.check_destinations(instruction.destination)
     src1 = reorder_buffer.check_source(instruction.source1)
     src2 = reorder_buffer.check_source(instruction.source2)
 
@@ -322,7 +332,7 @@ def issue():
             reorder_buffer.entry_list[rob_entry].source2_valid = False
 
 def execute():
-    global EXECUTION_FINISHED, ZERO, NEGATIVE, OVERFLOW
+    global EXECUTION_FINISHED, ZERO, NEGATIVE, OVERFLOW, speculating, branch_stall
     for entry in reorder_buffer.entry_list:
         if entry.ready is False and entry.cycle_issued != clock_cycle:
             if entry.executing is False:
@@ -335,12 +345,14 @@ def execute():
                             entry.remaining_cycles = 1
                         elif pwr_of_two(op1) or pwr_of_two(op2):
                             entry.remaining_cycles = 2
-                #elif entry.source2_valid is True and entry.speculative is True:
-                    #if entry.operand[0] == 'B':
-                        #branch_predict_at(entry)
+                elif entry.source2_valid is True and speculating is False:
+                    if entry.opcode[0] == 'B':
+                        branch_predict_at(entry)
+                        speculating = True
+                        branch_stall = False
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
-        if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.ready is False:
+        if entry.remaining_cycles <= 0 and entry.write_back_success is False  and entry.flushed is False and entry.ready is False:
             # Actually run the code
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
@@ -373,17 +385,18 @@ def execute():
             elif entry.opcode[0] == 'B':
                 branch(entry)
                 entry.ready = True
+                branch_stall = False
             elif entry.opcode == 'HALT':
                 done = True
                 for entry_other in reorder_buffer.entry_list:
-                    if entry_other.write_back_success is False and entry_other.opcode != 'HALT':
+                    if entry_other.write_back_success is False and entry.flushed is False and entry_other.opcode != 'HALT':
                         done = False
                         break
                 if done:
                     EXECUTION_FINISHED = True
 
             if entry.result == 0:
-                ZERO = True;
+                ZERO = True
             if entry.result < 0:
                 NEGATIVE = True
 
@@ -398,22 +411,21 @@ def write_result():
         if entry.ready is True and entry.executing is True:
             # write back next clock cycle
             entry.executing = False
-        elif entry.ready is True and entry.executing is False and entry.speculative is False:
+        elif entry.ready is True and entry.executing is False:
             # time to write back!
             for other_entry in reorder_buffer.entry_list[:idx]:
                 if other_entry.destination == entry.destination and other_entry.write_back_success is False:
                     WAW_FLAG = True
-            if not WAW_FLAG and not entry.speculative and not entry.write_back_success:
+            if not WAW_FLAG and not entry.speculative and not entry.write_back_success and not entry.flushed:
                 if entry.opcode == 'STR':
                     mem_dict[op2] = entry.result
-                elif entry.opcode[0] == 'B':
-                    branch(entry)
                 elif entry.opcode == 'LOAD':
                     R[int(entry.destination[1:])] = entry.result
                 elif entry.opcode == 'HALT':
                     continue
-                else:
+                elif not entry.opcode[0] == 'B':
                     R[int(entry.destination[1:])] = entry.result
+
                 if entry.rs_type == 'INT':
                     rs_int[entry.rs_index] = False
                 elif entry.rs_type == 'FPADD':
@@ -436,7 +448,7 @@ def pwr_of_two(num):
 
 def branch(entry):
     # Non speculatively execute the branch
-    global program_counter, speculating
+    global program_counter, speculating, branches_taken
     branch_yn = False
     op1, op2 = entry.get_values()
 
@@ -462,6 +474,7 @@ def branch(entry):
             branch_yn = True
 
     if branch_yn:
+        branches_taken += 1
         if entry.branch_prediction is True:
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
@@ -469,9 +482,9 @@ def branch(entry):
         elif entry.branch_prediction is False:
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
-                    other_entry.speculative = False
+                    #other_entry.speculative = False
                     if other_entry is not entry:
-                        other_entry.write_back_success = True
+                        other_entry.flushed = True
             program_counter = entry.PC_before_predict + int(op2)
         elif entry.branch_prediction is None:
             program_counter += int(op2)
@@ -479,9 +492,9 @@ def branch(entry):
         if entry.branch_prediction is True:
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
-                    other_entry.speculative = False
+                    #other_entry.speculative = False
                     if other_entry is not entry:
-                        other_entry.write_back_success = True
+                        other_entry.flushed = True
             program_counter = entry.PC_before_predict + int(op2)
         elif entry.branch_prediction is False:
             for other_entry in reorder_buffer.entry_list:
@@ -497,8 +510,9 @@ def branch_predict_at(entry):
     # predicts always taken
     global program_counter
     op1, op2 = entry.get_values()
-    entry.result = True
-    program_counter += int(op2)
+    entry.PC_before_predict = program_counter
+    entry.branch_prediction = False
+    #program_counter += int(op2)
 
 
 # Branch Predict: One bit branch predictor
