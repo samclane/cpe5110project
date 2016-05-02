@@ -174,9 +174,15 @@ mem_dict = {}
 R = RegisterFile()
 reorder_buffer = ReorderBuffer()
 program_counter = 0
+
+# branching stuff
 speculating = False
 branch_stall = False
 branches_taken = 0
+last_branch_correct = True
+
+
+
 cycle_dict = {
     "FPADD": 3,
     "FPSUB": 3,
@@ -256,8 +262,8 @@ def main(argv):
 
         clock_cycle += 1
 
-    print branches_taken
-    print str(stat_branch_predictions_correct) + "/" + str(stat_branch_predictions)
+    print "branches taken : " + str(branches_taken)
+    print "correctness ratio: " + str(stat_branch_predictions_correct) + "/" + str(stat_branch_predictions)
     print R[3]
     print "Finished with " + str(clock_cycle) + " clock cycles."
 
@@ -350,7 +356,7 @@ def execute():
                             entry.remaining_cycles = 2
                 elif entry.source2_valid is True and speculating is False:
                     if entry.opcode[0] == 'B':
-                        branch_predict_at(entry)
+                        branch_predict_1b(entry)
                         stat_branch_predictions += 1
                         speculating = True
                         branch_stall = False
@@ -393,7 +399,7 @@ def execute():
             elif entry.opcode == 'HALT':
                 done = True
                 for entry_other in reorder_buffer.entry_list:
-                    if entry_other.write_back_success is False and entry.flushed is False and entry_other.opcode != 'HALT':
+                    if entry_other.write_back_success is False and entry_other.flushed is False and entry_other.opcode != 'HALT':
                         done = False
                         break
                 if done:
@@ -451,7 +457,7 @@ def pwr_of_two(num):
 
 def branch(entry):
     # Non speculatively execute the branch
-    global program_counter, speculating, branches_taken, stat_branch_predictions_correct
+    global program_counter, speculating, branches_taken, stat_branch_predictions_correct, last_branch_correct
     branch_yn = False
     op1, op2 = entry.get_values()
 
@@ -482,10 +488,12 @@ def branch(entry):
         branches_taken += 1
         if entry.branch_prediction is True:
             stat_branch_predictions_correct += 1
+            last_branch_correct = True
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     other_entry.speculative = False
         elif entry.branch_prediction is False:
+            last_branch_correct = False
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     #other_entry.speculative = False
@@ -496,14 +504,16 @@ def branch(entry):
             program_counter += int(op2)
     else:
         if entry.branch_prediction is True:
+            last_branch_correct = False
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     #other_entry.speculative = False
                     if other_entry is not entry:
                         other_entry.flushed = True
-            program_counter = entry.PC_before_predict + int(op2)
+            program_counter = entry.PC_before_predict # + int(op2)
         elif entry.branch_prediction is False:
             stat_branch_predictions_correct += 1
+            last_branch_correct = True
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     other_entry.speculative = False
@@ -522,53 +532,37 @@ def branch_predict_at(entry):
     program_counter += int(op2)
 
 
+# Branch predict: Always Not Taken
+def branch_predict_ant(entry):
+    # predicts always not taken
+    global program_counter
+    op1, op2 = entry.get_values()
+    entry.PC_before_predict = program_counter
+    entry.branch_prediction = False
+    #program_counter += int(op2)
+
+
 # Branch Predict: One bit branch predictor
-state_1b = 0 # not taken
+state_1b = False # not taken
 def branch_predict_1b(entry):
-    # 0 - Not Taken
-    # 1 - Taken
-    global program_counter, state_1b
-    if entry.branch_success == False:
-        # if branch was incorrect, change prediction
-        state_1b = not state_1b
-    if state_1b:
-        # Predict taken
-        entry.result = True
-        entry.last_prediction = 1
-        op1, op2 = entry.get_values()
-        program_counter += int(op2)
+    global state_1b, program_counter, last_branch_correct
+    # dynamic branch prediction
+    if (last_branch_correct is False):
+        state_1b = ~state_1b
+    if(state_1b):
+        branch_predict_at(entry)
     else:
-        entry.result = False
-        entry.last_prediction = 0
+        branch_predict_ant(entry)
+
+
+
+
 
 # Branch Predict: Two bit branch predictor
 state_2b = 0 #strongly not taken
 def branch_predict_2b(entry):
-    # 0 - strongly not taken
-    # 1 - weakly not taken
-    # 2 - weakly taken
-    # 3 - strongly taken
-    global program_counter, state_2b
-    if entry.branch_success == False:
-        if entry.last_prediction == 1:
-        # if predicted  taken
-            if state_2b != 0:
-                state_2b -= 1
-        else:
-            # if predicted not taken
-            if state_2b != 3:
-                state_2b += 1
-    if state_2b in [0, 1]:
-        # if in not taken
-        entry.result = False
-        entry.last_prediction = 0
-        # change result to not taken, don't change PC
-    elif state_2b in [2, 3]:
-        # change result to taken, change pc accordingly
-        entry.result = True
-        entry.last_prediction = 1
-        op1, op2 = entry.get_values()
-        program_counter += int(op2)
+    global program_counter
+
 
 
 
