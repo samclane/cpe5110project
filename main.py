@@ -1,10 +1,21 @@
 #!/usr/bin/python
 
+# RATSNEST Architecture
+# Developed by:
+#   Sawyer McLane
+#   Caleb Olsen
+#   Hunter Mathews
+# April/May 2016
+# CPE 5110 - Principals of Computer Architecture
+#
+# To run from cmd:
+#
+#   python main.py [FILE] [at | ant | 1b | 2b]
+#       1st arg - File to be run
+#       2nd arg - branch prediction method to use. at - always taken, ant - always not taken, 1b - 1 bit, 2b - 2 bit
+
 import re
 import sys
-
-
-# sys.argv is command line args
 
 
 # data structure to represent an instruction. Holds the opcode and the operands as properties, as well as
