@@ -202,12 +202,15 @@ clock_cycle = 1
 rs_int = [False, False, False, False]
 rs_fp_mult = [False, False, False, False]
 rs_fp_add = [False, False, False, False]
+# data collection for analysis
+stat_branch_predictions = 0
+stat_branch_predictions_correct = 0
 
 
 
 def main(argv):
     # Global System Flags
-    global EXECUTION_FINISHED, instr_count, mem_count, instr_queue, mem_dict, clock_cycle
+    global EXECUTION_FINISHED, instr_count, mem_count, instr_queue, mem_dict, clock_cycle, stat_branch_predictions_correct, stat_branch_predictions
     # regular expression describing memory format
     # https://regex101.com/r/zY4hB0/3
     mem_finder = re.compile(ur"<(\d+)> ?<([-+]?\d*\.?\d*)>")
@@ -246,14 +249,15 @@ def main(argv):
         execute()
         write_result()
 
-        for entry in reorder_buffer.entry_list:
-            pprint(vars(entry))
-
+        #for entry in reorder_buffer.entry_list:
+        #   pprint(vars(entry))
+        print "R6: " + str(R[6])
         print '\n'
 
         clock_cycle += 1
 
     print branches_taken
+    print str(stat_branch_predictions_correct) + "/" + str(stat_branch_predictions)
     print R[3]
     print "Finished with " + str(clock_cycle) + " clock cycles."
 
@@ -307,7 +311,7 @@ def issue():
         elif instruction.opcode == 'HALT':
             succeeds = True
             for other_entry in reorder_buffer.entry_list:
-                if other_entry.opcode == 'HALT':
+                if other_entry.opcode == 'HALT' and other_entry.flushed is False:
                     succeeds = False
 
     # check for data dependencies
@@ -331,7 +335,7 @@ def issue():
             reorder_buffer.entry_list[rob_entry].source2_valid = False
 
 def execute():
-    global EXECUTION_FINISHED, ZERO, NEGATIVE, OVERFLOW, speculating, branch_stall
+    global EXECUTION_FINISHED, ZERO, NEGATIVE, OVERFLOW, speculating, branch_stall, stat_branch_predictions
     for entry in reorder_buffer.entry_list:
         if entry.ready is False and entry.cycle_issued != clock_cycle:
             if entry.executing is False:
@@ -347,11 +351,12 @@ def execute():
                 elif entry.source2_valid is True and speculating is False:
                     if entry.opcode[0] == 'B':
                         branch_predict_at(entry)
+                        stat_branch_predictions += 1
                         speculating = True
                         branch_stall = False
             elif entry.executing is True:
                 entry.remaining_cycles -= 1
-        if entry.remaining_cycles <= 0 and entry.write_back_success is False  and entry.flushed is False and entry.ready is False:
+        if entry.remaining_cycles <= 0 and entry.write_back_success is False and entry.flushed is False and entry.ready is False:
             # Actually run the code
             operand1, operand2 = entry.get_values()
             if entry.opcode == 'FPADD' or entry.opcode == 'ADD':
@@ -404,8 +409,8 @@ def execute():
 
 def write_result():
     global program_counter
-    WAW_FLAG = False
     for idx, entry in enumerate(reorder_buffer.entry_list):
+        WAW_FLAG = False
         op1, op2 = entry.get_values()
         if entry.ready is True and entry.executing is True:
             # write back next clock cycle
@@ -413,7 +418,7 @@ def write_result():
         elif entry.ready is True and entry.executing is False:
             # time to write back!
             for other_entry in reorder_buffer.entry_list[:idx]:
-                if other_entry.destination == entry.destination and other_entry.write_back_success is False:
+                if other_entry.destination is not None and other_entry.destination == entry.destination and other_entry.write_back_success is False:
                     WAW_FLAG = True
             if not WAW_FLAG and not entry.speculative and not entry.write_back_success and not entry.flushed:
                 if entry.opcode == 'STR':
@@ -446,7 +451,7 @@ def pwr_of_two(num):
 
 def branch(entry):
     # Non speculatively execute the branch
-    global program_counter, speculating, branches_taken
+    global program_counter, speculating, branches_taken, stat_branch_predictions_correct
     branch_yn = False
     op1, op2 = entry.get_values()
 
@@ -471,9 +476,12 @@ def branch(entry):
         if op1 != 0:
             branch_yn = True
 
+    entry.result = branch_yn
+
     if branch_yn:
         branches_taken += 1
         if entry.branch_prediction is True:
+            stat_branch_predictions_correct += 1
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     other_entry.speculative = False
@@ -495,6 +503,7 @@ def branch(entry):
                         other_entry.flushed = True
             program_counter = entry.PC_before_predict + int(op2)
         elif entry.branch_prediction is False:
+            stat_branch_predictions_correct += 1
             for other_entry in reorder_buffer.entry_list:
                 if other_entry.speculative is True:
                     other_entry.speculative = False
@@ -509,8 +518,8 @@ def branch_predict_at(entry):
     global program_counter
     op1, op2 = entry.get_values()
     entry.PC_before_predict = program_counter
-    entry.branch_prediction = False
-    #program_counter += int(op2)
+    entry.branch_prediction = True
+    program_counter += int(op2)
 
 
 # Branch Predict: One bit branch predictor
