@@ -45,9 +45,7 @@ class Instruction():
         # sets total cycles to completion (based on global dictionary of cycle counts)
         self.total_cycles = cycle_dict[self.opcode]
 
-    def __str__(self):
-        attrs = vars(self)
-        return ', '.join("%s: (%s)" % item for item in attrs.items())
+
 
 # data structure to represent register bank. extends dictionary allowing [] operator access
 class RegisterFile(dict):
@@ -132,8 +130,7 @@ class ReorderBufferEntry():
 
         return (value1, value2)
 
-    def __str__(self):
-        pprint(vars(self))
+
 
 
 # data structure to hold all the ReorderBufferEntries. Probably could have just been a list, but class allows for
@@ -427,7 +424,6 @@ def write_result():
                     continue
                 elif not entry.opcode[0] == 'B':
                     R[int(entry.destination[1:])] = entry.result
-
                 if entry.rs_type == 'INT':
                     rs_int[entry.rs_index] = False
                 elif entry.rs_type == 'FPADD':
