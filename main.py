@@ -356,7 +356,7 @@ def execute():
                             entry.remaining_cycles = 2
                 elif entry.source2_valid is True and speculating is False:
                     if entry.opcode[0] == 'B':
-                        branch_predict_1b(entry)
+                        branch_predict_2b(entry)
                         stat_branch_predictions += 1
                         speculating = True
                         branch_stall = False
@@ -549,6 +549,7 @@ def branch_predict_1b(entry):
     # dynamic branch prediction
     if (last_branch_correct is False):
         state_1b = ~state_1b
+    # execute branch prediction
     if(state_1b):
         branch_predict_at(entry)
     else:
@@ -560,8 +561,30 @@ def branch_predict_1b(entry):
 
 # Branch Predict: Two bit branch predictor
 state_2b = 0 #strongly not taken
+# 0 - strongly not taken
+# 1 - weakly not taken
+# 2 - weakly taken
+# 3 - strong taken
 def branch_predict_2b(entry):
-    global program_counter
+    global state_2b, program_counter, last_branch_correct
+    # dynamic predictor
+    if (last_branch_correct is False):
+        if (state_2b <= 1): # not taken
+            state_2b += 1
+        else: # taken
+            state_2b -= 1
+    else: #prediction correct
+        if (state_2b == 1):
+            state_2b -= 1
+        elif (state_2b == 2):
+            state_2b += 1
+    # execute prediction
+    if (state_2b <= 1):
+        branch_predict_ant(entry)
+    else:
+        branch_predict_at(entry)
+
+
 
 
 
