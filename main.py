@@ -403,7 +403,7 @@ def execute():
                     entry.result = (entry.result) % (2 ** 32)
                 entry.ready = True
             elif entry.opcode == 'FPDIV':
-                entry.result = operand1 / operand2
+                entry.result = float(operand1) / operand2
                 entry.ready = True
             elif entry.opcode == 'LOAD':
                 entry.result = operand2
